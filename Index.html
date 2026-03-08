@@ -176,10 +176,22 @@ function onOrientation(e) {
 function requestGyro() {
   if (typeof DeviceOrientationEvent !== 'undefined') {
     if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+      // iOS 13+ — must be called directly inside a user gesture (tap)
       DeviceOrientationEvent.requestPermission()
-        .then(r => { if (r === 'granted') window.addEventListener('deviceorientation', onOrientation); })
-        .catch(() => {});
+        .then(r => {
+          if (r === 'granted') {
+            window.addEventListener('deviceorientation', onOrientation);
+          } else {
+            document.getElementById('gyro-status').textContent = 'GYRO: DENIED — USE ← → KEYS';
+            document.getElementById('gyro-status').className   = 'hud-box warn';
+          }
+        })
+        .catch(() => {
+          document.getElementById('gyro-status').textContent = 'GYRO: USE ← → KEYS';
+          document.getElementById('gyro-status').className   = 'hud-box warn';
+        });
     } else {
+      // Android / desktop — no permission needed
       window.addEventListener('deviceorientation', onOrientation);
     }
   }
@@ -190,7 +202,7 @@ function requestGyro() {
     }
   }, 1800);
 }
-requestGyro();
+// requestGyro() is called inside startGame() which is triggered by a button tap
 
 // ── Nearest WP ──────────────────────────────────────────────────
 function nearestWP() {
@@ -237,6 +249,9 @@ const stars = Array.from({length: 140}, () => ({
 let gameRunning = false, lastTime = 0;
 
 function startGame() {
+  // iOS REQUIRES requestPermission to be the very first synchronous call
+  // inside a user-gesture handler — nothing async can precede it
+  requestGyro();
   document.getElementById('overlay').style.display = 'none';
   Object.assign(car, { x:500, y:100, angle:0, speed:0, steer:0,
     trail:[], laps:0, lastWP:0, score:0, bestLap:null, lapStart: performance.now() });
@@ -244,7 +259,6 @@ function startGame() {
   document.getElementById('score-val').textContent = '00000';
   document.getElementById('lap-val').textContent   = '0 / 3';
   document.getElementById('best-val').textContent  = '--:--';
-  requestGyro();
   gameRunning = true;
   lastTime = performance.now();
   requestAnimationFrame(loop);
