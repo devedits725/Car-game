@@ -79,6 +79,7 @@ canvas { display:block; }
 <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
 <script>
 // ABLY
+const ABLY_KEY = 'REPLACE_WITH_ABLY_KEY';
 let usedKey = '';
 let ablyClient = null, channel = null, steerVal = 0, phoneReady = false;
 const ROOM='gyro-'+Math.random().toString(36).slice(2,8).toUpperCase();
@@ -125,7 +126,11 @@ function connectToAbly(key){
 }
 
 window.addEventListener("load", () => {
-  setStatus("WAITING FOR KEY","");
+  if (ABLY_KEY !== 'REPLACE' + '_WITH_ABLY_KEY' && ABLY_KEY.includes('.')) {
+    connectToAbly(ABLY_KEY);
+  } else {
+    setStatus("WAITING FOR KEY","");
+  }
 });
 
 document.getElementById('connectBtn').addEventListener('click',()=>{
