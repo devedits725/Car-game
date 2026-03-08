@@ -79,7 +79,7 @@ canvas { display:block; }
 <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
 <script>
 // ABLY
-const ABLY_KEY = process.env.NEXT_PUBLIC_ABLY_KEY;
+const ABLY_KEY = process.env.ABLY_KEY;
 let ablyClient = null, channel = null, steerVal = 0, phoneReady = false;
 const ROOM='gyro-'+Math.random().toString(36).slice(2,8).toUpperCase();
 
