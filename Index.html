@@ -79,11 +79,57 @@ canvas { display:block; }
 <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
 <script>
 // ABLY
-let ablyClient=null, channel=null, steerVal=0, phoneReady=false;
+const ABLY_KEY = process.env.NEXT_PUBLIC_ABLY_KEY;
+let ablyClient = null, channel = null, steerVal = 0, phoneReady = false;
 const ROOM='gyro-'+Math.random().toString(36).slice(2,8).toUpperCase();
 
-document.getElementById('connectBtn').addEventListener('click',()=>{
-  const key=document.getElementById('keyInput').value.trim();
+window.addEventListener("load", () => {
+
+  const key = ABLY_KEY;
+
+  if(!key){
+    setStatus("ABLY KEY NOT FOUND","err");
+    return;
+  }
+
+  setStatus("CONNECTING...","");
+
+  try{
+
+    ablyClient = new Ably.Realtime({
+      key: key,
+      clientId: 'tv-'+Date.now()
+    });
+
+    ablyClient.connection.on('connected',()=>{
+
+      setStatus('● ABLY CONNECTED','ok');
+
+      channel = ablyClient.channels.get(ROOM);
+
+      channel.subscribe('gyro',(msg)=>{
+        steerVal = msg.data.steer || 0;
+        document.getElementById('gth').style.left=((steerVal+1)/2*100)+'%';
+        document.getElementById('gyroHud').textContent=(msg.data.gamma||0).toFixed(0)+'°';
+        document.getElementById('gyroHud').style.color='#00FF88';
+      });
+
+      channel.subscribe('phone_hello',()=>setPhone(true));
+      channel.subscribe('phone_bye',()=>setPhone(false));
+
+      showStep2();
+
+    });
+
+    ablyClient.connection.on('failed',()=>{
+      setStatus('FAILED — CHECK KEY','err');
+    });
+
+  }catch(e){
+    setStatus('ERROR: '+e.message,'err');
+  }
+
+});
   if(!key||!key.includes(':')){setStatus('INVALID KEY — SHOULD CONTAIN :','err');return;}
   setStatus('CONNECTING...','');
   document.getElementById('connectBtn').disabled=true;
