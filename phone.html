@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>GYRO RACER — Controller</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html,body { height:100%; background:#0a0a0a; font-family:'Courier New',monospace; touch-action:none; user-select:none; overflow:hidden; }
+body { display:flex; flex-direction:column; align-items:center; }
+#arcWrap { flex:1; width:100%; display:flex; align-items:center; justify-content:center; }
+#arcSvg { width:min(88vw,320px); height:min(88vw,320px); }
+#statusBar { width:100%; padding:10px 16px; background:#111; border-top:2px solid #1a1a1a; display:flex; align-items:center; justify-content:space-between; }
+.sbit { font-size:9px; letter-spacing:2px; color:rgba(255,255,255,0.3); }
+.sbit span { color:#FFD700; font-size:14px; display:block; margin-top:2px; }
+#raceTag { display:none; font-size:9px; letter-spacing:3px; color:#00FF88; border:2px solid #00FF88; padding:4px 10px; }
+#controls { width:100%; padding:10px 16px 18px; background:#111; border-top:2px solid #1a1a1a; display:flex; gap:8px; justify-content:center; }
+.cb { background:rgba(255,255,255,0.05); color:#fff; border:2px solid rgba(255,255,255,0.18); font-family:'Courier New',monospace; font-size:11px; font-weight:bold; letter-spacing:1px; padding:10px 0; cursor:pointer; flex:1; max-width:130px; }
+.cb:active { opacity:.7; }
+.cb.y { border-color:#FFD700; color:#FFD700; }
+.cb.g { border-color:#00FF88; color:#00FF88; }
+/* overlay */
+#overlay { position:fixed; inset:0; background:#0a0a0a; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:50; gap:16px; padding:28px; text-align:center; }
+#overlay h1 { color:#FFD700; font-size:clamp(24px,9vw,44px); font-weight:900; letter-spacing:5px; text-shadow:3px 3px 0 #000; line-height:1.15; }
+#overlay p { color:rgba(255,255,255,0.45); font-size:10px; letter-spacing:2px; line-height:2.2; }
+#wsStatus { font-size:10px; letter-spacing:2px; padding:8px 18px; border:2px solid rgba(255,255,255,0.15); color:rgba(255,255,255,0.35); }
+#wsStatus.ok { border-color:#00FF88; color:#00FF88; }
+#wsStatus.err { border-color:#FF4400; color:#FF4400; }
+.startBtn { background:#FFD700; color:#000; font-family:'Courier New',monospace; font-weight:900; font-size:14px; letter-spacing:3px; border:4px solid #000; padding:15px 0; cursor:pointer; box-shadow:4px 4px 0 #000; width:100%; max-width:260px; }
+.startBtn:active { transform:translate(2px,2px); box-shadow:2px 2px 0 #000; }
+/* sens panel */
+#sensPanel { display:none; position:fixed; bottom:76px; left:50%; transform:translateX(-50%); background:#111; border:2px solid #FFD700; padding:16px 20px; z-index:60; width:240px; text-align:center; }
+input[type=range] { -webkit-appearance:none; width:100%; height:8px; background:#222; border:2px solid #333; outline:none; margin:8px 0; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; height:22px; background:#FFD700; border:3px solid #000; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<div id="overlay">
+  <h1>🏎<br>GYRO<br>RACER</h1>
+  <p>PHONE CONTROLLER<br>TILT LEFT / RIGHT TO STEER</p>
+  <div id="wsStatus">READING URL...</div>
+  <button class="startBtn" id="permitBtn">▶ ENABLE GYRO &amp; CONNECT</button>
+</div>
+
+<div id="arcWrap">
+  <svg id="arcSvg" viewBox="0 0 300 300">
+    <path d="M 30 200 A 140 140 0 0 1 270 200" fill="none" stroke="#1a1a1a" stroke-width="30" stroke-linecap="round"/>
+    <path d="M 30 200 A 140 140 0 0 1 270 200" fill="none" stroke="#2a2a2a" stroke-width="18" stroke-linecap="round"/>
+    <path id="arcFill" d="M 150 60" fill="none" stroke="#FFD700" stroke-width="16" stroke-linecap="round" opacity="0.9"/>
+    <line x1="150" y1="62" x2="150" y2="90" stroke="#333" stroke-width="3"/>
+    <g id="needle" style="transform-origin:150px 200px; transition:transform 0.05s linear">
+      <line x1="150" y1="200" x2="150" y2="70" stroke="#FFD700" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="150" cy="200" r="11" fill="#FFD700" stroke="#000" stroke-width="3"/>
+      <circle cx="150" cy="74" r="6" fill="#FFD700"/>
+    </g>
+    <text x="18" y="228" fill="#333" font-size="14" font-family="Courier New" font-weight="bold">◀</text>
+    <text x="268" y="228" fill="#333" font-size="14" font-family="Courier New" font-weight="bold">▶</text>
+    <text id="steerTxt" x="150" y="182" fill="#fff" font-size="24" font-weight="bold" font-family="Courier New" text-anchor="middle">0°</text>
+    <text id="steerPct" x="150" y="235" fill="#444" font-size="10" font-family="Courier New" text-anchor="middle">CENTER</text>
+  </svg>
+</div>
+
+<div id="statusBar">
+  <div class="sbit">TILT<span id="tiltVal">—</span></div>
+  <div id="raceTag">● LIVE</div>
+  <div class="sbit" style="text-align:right">STEER<span id="steerPctHud">—</span></div>
+</div>
+
+<div id="controls">
+  <button class="cb y" id="flipBtn">⇄ FLIP</button>
+  <button class="cb g" id="calBtn">✦ RECAL</button>
+  <button class="cb"   id="settBtn">⚙ SENS</button>
+</div>
+
+<div id="sensPanel">
+  <div style="color:#FFD700;font-size:11px;letter-spacing:2px;margin-bottom:4px">SENSITIVITY</div>
+  <input type="range" id="sensSlider" min="8" max="60" value="28" step="2">
+  <div style="color:#FFD700;font-size:16px;font-weight:bold" id="sensLbl">28°</div>
+  <button onclick="document.getElementById('sensPanel').style.display='none'" style="margin-top:10px;background:#FFD700;color:#000;font-family:'Courier New',monospace;font-weight:900;font-size:12px;letter-spacing:2px;border:3px solid #000;padding:8px 20px;cursor:pointer">✓ DONE</button>
+</div>
+
+<script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
+<script>
+// Read API key + room from URL hash (set by TV page)
+// Hash format: base64(apiKey|ROOM)
+let ablyClient=null,channel=null,wsReady=false;
+let rawAlpha=0,rawBeta=0,rawGamma=0,gyroLive=false;
+const G={axis:'gamma',invert:false,flip:false,sens:28,dz:4,base:null};
+
+function parseHash(){
+  const h=location.hash.slice(1);
+  if(!h){setStatus('NO KEY IN URL — SCAN QR OR COPY URL FROM TV','err');return null;}
+  try{
+    const decoded=atob(h);
+    const sep=decoded.lastIndexOf('|');
+    return{key:decoded.slice(0,sep),room:decoded.slice(sep+1)};
+  }catch(e){setStatus('INVALID URL — GO BACK TO TV PAGE','err');return null;}
+}
+
+function setStatus(msg,cls){const e=document.getElementById('wsStatus');e.textContent=msg;e.className=cls;}
+
+function connectAbly(key,room){
+  setStatus('CONNECTING TO ABLY...','');
+  try{
+    ablyClient=new Ably.Realtime({key,clientId:'phone-'+Date.now()});
+    ablyClient.connection.on('connected',()=>{
+      wsReady=true;
+      setStatus('● CONNECTED — ENABLE GYRO BELOW','ok');
+      channel=ablyClient.channels.get(room);
+      channel.subscribe('tv_cmd',(msg)=>{
+        if(msg.data&&msg.data.type==='start') document.getElementById('raceTag').style.display='block';
+      });
+      // Announce arrival
+      channel.publish('phone_hello',{ts:Date.now()});
+      // Start streaming
+      setInterval(sendGyro,33);
+    });
+    ablyClient.connection.on('failed',()=>setStatus('ABLY FAILED — CHECK KEY','err'));
+    ablyClient.connection.on('disconnected',()=>setStatus('DISCONNECTED','err'));
+  }catch(e){setStatus('ERROR: '+e.message,'err');}
+}
+
+function sendGyro(){
+  if(!wsReady||!channel)return;
+  channel.publish('gyro',{alpha:rawAlpha,beta:rawBeta,gamma:rawGamma,steer:computeSteer(),raw:getRaw()});
+}
+
+// Gyro
+function getRaw(){return G.axis==='gamma'?rawGamma:G.axis==='beta'?rawBeta:rawAlpha;}
+function computeSteer(){
+  let raw=getRaw(),base=G.base!==null?G.base:raw,delta=raw-base;
+  if(G.axis==='alpha'){if(delta>180)delta-=360;if(delta<-180)delta+=360;}
+  const dz=G.dz;
+  if(Math.abs(delta)<dz)delta=0;else delta-=Math.sign(delta)*dz;
+  let v=delta/Math.max(1,G.sens-dz);v=Math.max(-1,Math.min(1,v));
+  if(G.invert)v=-v;if(G.flip)v=-v;return v;
+}
+function onOrient(e){
+  rawAlpha=e.alpha||0;rawBeta=e.beta||0;rawGamma=e.gamma||0;
+  if(!gyroLive){gyroLive=true;if(G.base===null)G.base=getRaw();}
+  updateUI();
+}
+function updateUI(){
+  const raw=getRaw(),steer=computeSteer(),deg=steer*88;
+  document.getElementById('needle').style.transform='rotate('+deg+'deg)';
+  // arc
+  const R=140,cx=150,cy=200,sa=-Math.PI/2,ea=sa+steer*Math.PI/2;
+  const x1=cx+R*Math.cos(sa),y1=cy+R*Math.sin(sa),x2=cx+R*Math.cos(ea),y2=cy+R*Math.sin(ea);
+  if(Math.abs(steer)<0.02){document.getElementById('arcFill').setAttribute('d','M '+x1+' '+y1);}
+  else{document.getElementById('arcFill').setAttribute('d','M '+x1+' '+y1+' A '+R+' '+R+' 0 0 '+(steer>0?1:0)+' '+x2+' '+y2);}
+  document.getElementById('arcFill').setAttribute('stroke',steer<0?'#FF6644':'#FFD700');
+  document.getElementById('steerTxt').textContent=raw.toFixed(0)+'°';
+  const pct=Math.round(Math.abs(steer)*100);
+  document.getElementById('steerPct').textContent=steer===0?'CENTER':((steer<0?'◀ ':'')+pct+'%'+(steer>0?' ▶':''));
+  document.getElementById('tiltVal').textContent=raw.toFixed(1)+'°';
+  document.getElementById('steerPctHud').textContent=(steer*100).toFixed(0)+'%';
+}
+
+function requestGyro(){
+  if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
+    DeviceOrientationEvent.requestPermission().then(s=>{if(s==='granted')window.addEventListener('deviceorientation',onOrient);}).catch(console.error);
+  }else{window.addEventListener('deviceorientation',onOrient);}
+}
+
+// Init
+const parsed=parseHash();
+if(parsed)connectAbly(parsed.key,parsed.room);
+
+document.getElementById('permitBtn').addEventListener('click',()=>{
+  requestGyro();
+  document.getElementById('overlay').style.display='none';
+});
+document.getElementById('flipBtn').addEventListener('click',()=>{
+  G.flip=!G.flip;const b=document.getElementById('flipBtn');
+  b.textContent=G.flip?'⇄ ON':'⇄ FLIP';b.style.color=G.flip?'#00FF88':'#FFD700';b.style.borderColor=G.flip?'#00FF88':'#FFD700';
+});
+document.getElementById('calBtn').addEventListener('click',()=>{
+  G.base=getRaw();const b=document.getElementById('calBtn'),o=b.textContent;b.textContent='✦ SET!';setTimeout(()=>b.textContent=o,900);
+});
+document.getElementById('settBtn').addEventListener('click',()=>{
+  const p=document.getElementById('sensPanel');p.style.display=p.style.display==='none'?'block':'none';
+});
+document.getElementById('sensSlider').addEventListener('input',function(){G.sens=+this.value;document.getElementById('sensLbl').textContent=G.sens+'°';});
+
+// Keep screen on
+if('wakeLock'in navigator)navigator.wakeLock.request('screen').catch(()=>{});
+
+// Announce leaving
+window.addEventListener('beforeunload',()=>{if(channel)channel.publish('phone_bye',{});});
+</script>
+</body>
+</html>
