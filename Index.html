@@ -79,7 +79,7 @@ canvas { display:block; }
 <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
 <script>
 // ABLY
-const ABLY_KEY = process.env.ABLY_KEY;
+const ABLY_KEY = process.env.NEXT_PUBLIC_ABLY_KEY;
 let ablyClient = null, channel = null, steerVal = 0, phoneReady = false;
 const ROOM='gyro-'+Math.random().toString(36).slice(2,8).toUpperCase();
 
@@ -144,18 +144,12 @@ function setPhone(on){
 function showStep2(){
   document.getElementById('step1').style.display='none';
   document.getElementById('step2').style.display='flex';
-  function showStep2(){
-  document.getElementById('step1').style.display='none';
-  document.getElementById('step2').style.display='flex';
 
   const encoded = btoa(ROOM);
   const phoneUrl = location.origin + '/phone.html#' + encoded;
 
   document.getElementById('phoneUrlBox').innerHTML =
     'Open this URL on your phone:<br><br><strong style="color:#FFD700">'+phoneUrl+'</strong>';
-}
-  const phoneUrl=location.href.replace('tv.html','phone.html')+'#'+encoded;
-  document.getElementById('phoneUrlBox').innerHTML='Open this URL on your phone:<br><br><strong style="color:#FFD700">'+phoneUrl+'</strong>';
 }
 
 document.getElementById('startBtn').addEventListener('click',()=>{
