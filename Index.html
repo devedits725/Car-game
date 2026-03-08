@@ -79,32 +79,27 @@ canvas { display:block; }
 <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
 <script>
 // ABLY
-const ABLY_KEY = process.env.NEXT_PUBLIC_ABLY_KEY;
+let usedKey = '';
 let ablyClient = null, channel = null, steerVal = 0, phoneReady = false;
 const ROOM='gyro-'+Math.random().toString(36).slice(2,8).toUpperCase();
 
-window.addEventListener("load", () => {
+function connectToAbly(key){
+  if(!key){ setStatus("PLEASE ENTER A KEY","err"); return; }
 
-  const key = ABLY_KEY;
-
-  if(!key){
-    setStatus("ABLY KEY NOT FOUND","err");
-    return;
-  }
+  // Clean up existing
+  if(ablyClient) ablyClient.close();
 
   setStatus("CONNECTING...","");
 
   try{
-
     ablyClient = new Ably.Realtime({
       key: key,
       clientId: 'tv-'+Date.now()
     });
 
     ablyClient.connection.on('connected',()=>{
-
+      usedKey = key;
       setStatus('● ABLY CONNECTED','ok');
-
       channel = ablyClient.channels.get(ROOM);
 
       channel.subscribe('gyro',(msg)=>{
@@ -117,8 +112,7 @@ window.addEventListener("load", () => {
       channel.subscribe('phone_hello',()=>setPhone(true));
       channel.subscribe('phone_bye',()=>setPhone(false));
 
-      showStep2();
-
+      showStep2(key);
     });
 
     ablyClient.connection.on('failed',()=>{
@@ -128,7 +122,15 @@ window.addEventListener("load", () => {
   }catch(e){
     setStatus('ERROR: '+e.message,'err');
   }
+}
 
+window.addEventListener("load", () => {
+  setStatus("WAITING FOR KEY","");
+});
+
+document.getElementById('connectBtn').addEventListener('click',()=>{
+  const key = document.getElementById('keyInput').value.trim();
+  connectToAbly(key);
 });
   
 
@@ -141,11 +143,11 @@ function setPhone(on){
   else{b.textContent='📱 PHONE DISCONNECTED';b.className='';s.disabled=true;w.textContent='📱 OPEN PHONE PAGE TO CONNECT';w.className='';}
 }
 
-function showStep2(){
+function showStep2(key){
   document.getElementById('step1').style.display='none';
   document.getElementById('step2').style.display='flex';
 
-  const encoded = btoa(ROOM);
+  const encoded = btoa(key + '|' + ROOM);
   const phoneUrl = location.origin + '/phone.html#' + encoded;
 
   document.getElementById('phoneUrlBox').innerHTML =
