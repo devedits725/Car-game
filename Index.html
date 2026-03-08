@@ -254,6 +254,17 @@ for (let i = 0; i < N; i++) {
   TP.push(new THREE.Vector3(Math.cos(t) * 45 + Math.sin(t * 2) * 4, 0, Math.sin(t) * 30));
 }
 
+// Compute starting angle from track tangent at index 0
+function getTrackAngleAtIndex(idx) {
+  const p0 = TP[idx];
+  const p1 = TP[(idx + 1) % N];
+  const dx = p1.x - p0.x;
+  const dz = p1.z - p0.z;
+  return Math.atan2(dx, dz);
+}
+const START_IDX = 0;
+const START_ANGLE = getTrackAngleAtIndex(START_IDX);
+
 function buildRoad() {
   const pos = [], idx = [], nor = []; let vi = 0;
   const push = (x, y, z, nx, ny, nz) => { pos.push(x, y, z); nor.push(nx, ny, nz); return vi++; };
@@ -292,22 +303,88 @@ function buildRoad() {
   m.receiveShadow = true; return m;
 }
 
-function buildBarriers() {
+// ══════════════════════════════════════════
+//  GUARDRAILS (continuous wall segments)
+// ══════════════════════════════════════════
+function buildGuardrails() {
   const g = new THREE.Group();
-  const mR = new THREE.MeshLambertMaterial({ color: 0xFF2222 });
-  const mW = new THREE.MeshLambertMaterial({ color: 0xEEEEEE });
-  const geo = new THREE.BoxGeometry(1.1, 0.7, 1.1);
+
+  // Materials
+  const matBeamR  = new THREE.MeshLambertMaterial({ color: 0xFF2222 }); // red panel
+  const matBeamW  = new THREE.MeshLambertMaterial({ color: 0xEEEEEE }); // white panel
+  const matPost   = new THREE.MeshLambertMaterial({ color: 0x888888 }); // grey steel post
+  const matBase   = new THREE.MeshLambertMaterial({ color: 0x555555 }); // dark base
+
+  const RAIL_H    = 0.85;  // total railing height
+  const BEAM_H    = 0.28;  // W-beam height
+  const BEAM_THICK = 0.08;
+  const POST_W    = 0.14;
+  const POST_H    = RAIL_H;
+  const BASE_H    = 0.12;
+  const BASE_W    = 0.22;
+
   for (let i = 0; i < N; i++) {
-    const p = TP[i], p1 = TP[(i+1)%N];
-    const f = new THREE.Vector3().subVectors(p1, p).normalize();
-    const r = new THREE.Vector3(-f.z, 0, f.x);
-    const mat = (Math.floor(i / 3) % 2 === 0) ? mR : mW;
-    [-1, 1].forEach(s => {
-      const m = new THREE.Mesh(geo, mat);
-      m.position.set(p.x + r.x*s*(RW+0.4), p.y+0.15, p.z + r.z*s*(RW+0.4));
-      m.castShadow = true; g.add(m);
+    const p0 = TP[i], p1 = TP[(i + 1) % N];
+    const fwd = new THREE.Vector3().subVectors(p1, p0);
+    const segLen = fwd.length();
+    const fDir = fwd.clone().normalize();
+    const rDir = new THREE.Vector3(-fDir.z, 0, fDir.x);
+
+    const midX = (p0.x + p1.x) * 0.5;
+    const midZ = (p0.z + p1.z) * 0.5;
+    const angle = Math.atan2(fDir.x, fDir.z);
+
+    const colorAlt = (Math.floor(i / 4) % 2 === 0);
+
+    [-1, 1].forEach(side => {
+      const offX = rDir.x * side * (RW + 0.55);
+      const offZ = rDir.z * side * (RW + 0.55);
+
+      // Base plate
+      const baseGeo = new THREE.BoxGeometry(BASE_W, BASE_H, segLen + 0.05);
+      const base = new THREE.Mesh(baseGeo, matBase);
+      base.position.set(midX + offX, BASE_H * 0.5 - 0.02, midZ + offZ);
+      base.rotation.y = angle;
+      base.castShadow = true;
+      g.add(base);
+
+      // W-beam (alternating red/white)
+      const beamMat = colorAlt ? matBeamR : matBeamW;
+      const beamGeo = new THREE.BoxGeometry(BEAM_THICK, BEAM_H, segLen + 0.05);
+      const beam = new THREE.Mesh(beamGeo, beamMat);
+      beam.position.set(
+        midX + offX + rDir.x * side * (BEAM_THICK * 0.4),
+        BASE_H + BEAM_H * 0.5 + 0.22,
+        midZ + offZ + rDir.z * side * (BEAM_THICK * 0.4)
+      );
+      beam.rotation.y = angle;
+      beam.castShadow = true;
+      g.add(beam);
+
+      // Top cap rail
+      const capGeo = new THREE.BoxGeometry(POST_W * 0.7, 0.08, segLen + 0.05);
+      const cap = new THREE.Mesh(capGeo, matPost);
+      cap.position.set(midX + offX, BASE_H + RAIL_H - 0.04, midZ + offZ);
+      cap.rotation.y = angle;
+      g.add(cap);
+
+      // Post every ~4 segments
+      if (i % 4 === 0) {
+        [p0].forEach(pt => {
+          const postGeo = new THREE.BoxGeometry(POST_W, POST_H, POST_W);
+          const post = new THREE.Mesh(postGeo, matPost);
+          post.position.set(
+            pt.x + rDir.x * side * (RW + 0.55),
+            POST_H * 0.5,
+            pt.z + rDir.z * side * (RW + 0.55)
+          );
+          post.castShadow = true;
+          g.add(post);
+        });
+      }
     });
   }
+
   return g;
 }
 
@@ -355,7 +432,7 @@ function buildWorld() {
   while (scene.children.length) scene.remove(scene.children[0]);
   scene.add(sun); scene.add(new THREE.AmbientLight(0xaaccff, 0.7));
   scene.add(buildRoad());
-  scene.add(buildBarriers());
+  scene.add(buildGuardrails());
   car3d = buildCar(); scene.add(car3d);
   clouds = [];
   [[-55,22,15],[45,26,-35],[5,20,55],[-38,18,-45],[62,24,8],[-14,30,-20],[32,19,42]].forEach(([x,y,z]) => {
@@ -370,17 +447,17 @@ function buildWorld() {
 //  GYRO CONFIG
 // ══════════════════════════════════════════
 const G = {
-  axis:   'gamma', // 'gamma' | 'beta' | 'alpha'
+  axis:   'gamma',
   invert: false,
-  flip:   false,   // quick flip button
-  sens:   28,      // degrees = full steer
-  dz:     5,       // dead zone degrees
-  base:   null,    // calibration offset
+  flip:   false,
+  sens:   28,
+  dz:     5,
+  base:   null,
 };
 
 let rawAlpha = 0, rawBeta = 0, rawGamma = 0;
 let gyroAvail = false;
-let steerVal = 0; // final -1..1 sent to physics
+let steerVal = 0;
 
 function getRaw() {
   if (G.axis === 'gamma') return rawGamma;
@@ -392,16 +469,13 @@ function computeSteer() {
   let raw = getRaw();
   const base = G.base !== null ? G.base : raw;
   let delta = raw - base;
-  // Wrap alpha (0-360)
   if (G.axis === 'alpha') {
     if (delta >  180) delta -= 360;
     if (delta < -180) delta += 360;
   }
-  // Dead zone
   const dz = G.dz;
   if (Math.abs(delta) < dz) delta = 0;
   else delta -= Math.sign(delta) * dz;
-  // Normalize to -1..1
   let v = delta / Math.max(1, G.sens - dz);
   v = Math.max(-1, Math.min(1, v));
   if (G.invert) v = -v;
@@ -422,17 +496,13 @@ function onOrient(e) {
   rawGamma = e.gamma || 0;
   if (!gyroAvail) {
     gyroAvail = true;
-    if (G.base === null) G.base = getRaw(); // auto-calibrate at first reading
+    if (G.base === null) G.base = getRaw();
     document.getElementById('gyroHud').style.color = '#00FF88';
   }
-  // Update steer
   steerVal = computeSteer();
-  // Steer bar
   const pct = (steerVal + 1) / 2 * 100;
   document.getElementById('gth').style.left = pct + '%';
-  // HUD
   document.getElementById('gyroHud').textContent = getRaw().toFixed(0) + '°';
-  // Settings live vals
   const aH = G.axis==='alpha', bH = G.axis==='beta', gH = G.axis==='gamma';
   document.getElementById('rawVals').innerHTML =
     `α ${aH?'<span>':''}${rawAlpha.toFixed(1)}°${aH?'</span>':''}&nbsp;&nbsp;`+
@@ -441,7 +511,6 @@ function onOrient(e) {
 }
 
 function requestGyro() {
-  // iOS 13+: requestPermission MUST be the very first synchronous call inside a tap
   if (typeof DeviceOrientationEvent !== 'undefined' &&
       typeof DeviceOrientationEvent.requestPermission === 'function') {
     DeviceOrientationEvent.requestPermission()
@@ -483,9 +552,13 @@ renderer.domElement.addEventListener('touchend', () => {
 // ══════════════════════════════════════════
 //  CAR PHYSICS
 // ══════════════════════════════════════════
-let carPos = new THREE.Vector3(45, 0.9, 0);
-let carAngle = Math.PI / 2, carSpeed = 0;
+let carPos = new THREE.Vector3();
+let carAngle = 0, carSpeed = 0;
+// carVel tracks the actual XZ velocity vector for proper wall reflection
+let carVel = new THREE.Vector2(0, 0);
 const MAX_SPD = 0.38, ACCEL = 0.018, FRICTION = 0.97, TURN = 0.048;
+const RAIL_LIMIT = RW - 0.9;   // distance from centreline before hitting rail (car half-width ~0.8)
+const RAIL_BOUNCE = 0.38;       // how much speed is kept after bounce (energy loss)
 let lap = 0, lastIdx = -1, running = false, cfTimer = 0;
 
 function nearestTP() {
@@ -494,13 +567,32 @@ function nearestTP() {
   return { idx: bi, dist: bd };
 }
 
+// Returns { fwd, right, lateralOffset } relative to track centreline at nearest segment
+function trackFrame(idx) {
+  const p0 = TP[idx];
+  const p1 = TP[(idx + 1) % N];
+  const fwd   = new THREE.Vector3().subVectors(p1, p0).normalize();
+  const right  = new THREE.Vector3(-fwd.z, 0, fwd.x);  // points track-right
+  const tocar  = new THREE.Vector3().subVectors(carPos, p0);
+  const lateralOffset = tocar.dot(right);               // signed: +right, -left
+  return { fwd, right, lateralOffset };
+}
+
 function resetCar() {
-  carPos.set(45, 0.9, 0);
-  carAngle = Math.PI / 2;
+  const startPt = TP[START_IDX];
+  carPos.set(startPt.x, 0.9, startPt.z);
+  carAngle = START_ANGLE;
   carSpeed = 0;
+  carVel.set(0, 0);
   lap = 0; lastIdx = -1;
   document.getElementById('lp').textContent = '0';
-  if (gyroAvail) G.base = getRaw(); // recalibrate on every restart
+  if (gyroAvail) G.base = getRaw();
+  camera.position.set(
+    carPos.x - Math.sin(carAngle) * 9,
+    carPos.y + 4.5,
+    carPos.z - Math.cos(carAngle) * 9
+  );
+  camera.lookAt(carPos.x, carPos.y + 1, carPos.z);
 }
 
 // ══════════════════════════════════════════
@@ -518,23 +610,55 @@ function update() {
     steerVal = computeSteer();
   }
 
-  const { idx, dist } = nearestTP();
-  const onTrack = dist < RW * 1.05;
-  const targetSpd = onTrack ? MAX_SPD : MAX_SPD * 0.3;
-  carSpeed += (targetSpd - carSpeed) * ACCEL;
+  const { idx } = nearestTP();
+  const { fwd, right, lateralOffset } = trackFrame(idx);
+
+  // Speed control
+  carSpeed += (MAX_SPD - carSpeed) * ACCEL;
   carSpeed *= FRICTION;
 
+  // Steering
   carAngle += steerVal * TURN * (carSpeed / MAX_SPD + 0.3);
-  carPos.x += Math.sin(carAngle) * carSpeed;
-  carPos.z += Math.cos(carAngle) * carSpeed;
-  carPos.y = 0.9;
 
-  if (!onTrack) {
-    const push = carPos.clone().sub(TP[idx]).normalize();
-    carPos.add(push.multiplyScalar(0.1));
-    carSpeed *= 0.86;
-    cfTimer = 7;
+  // Move
+  const dx = Math.sin(carAngle) * carSpeed;
+  const dz = Math.cos(carAngle) * carSpeed;
+  carPos.x += dx;
+  carPos.z += dz;
+  carPos.y = 0.9;
+  carVel.set(dx, dz);
+
+  // ── GUARDRAIL COLLISION ──────────────────
+  // Re-sample lateral offset after movement
+  const { lateralOffset: lat2, right: r2 } = trackFrame(idx);
+  const absLat = Math.abs(lat2);
+
+  if (absLat > RAIL_LIMIT) {
+    // 1. Push car back inside the rail boundary
+    const penetration = absLat - RAIL_LIMIT;
+    const pushSign = lat2 > 0 ? -1 : 1;  // push toward track centre
+    carPos.x += r2.x * pushSign * penetration;
+    carPos.z += r2.z * pushSign * penetration;
+
+    // 2. Reflect the velocity component that is perpendicular to the wall
+    //    Wall normal = r2 (or -r2 depending on side)
+    const wallNX = r2.x * (lat2 > 0 ? 1 : -1);
+    const wallNZ = r2.z * (lat2 > 0 ? 1 : -1);
+    const dot = carVel.x * wallNX + carVel.y * wallNZ;
+    if (dot > 0) { // only reflect if moving into wall
+      carVel.x -= (1 + RAIL_BOUNCE) * dot * wallNX;
+      carVel.y -= (1 + RAIL_BOUNCE) * dot * wallNZ;
+      // Convert reflected velocity back to angle + speed
+      const newSpd = Math.sqrt(carVel.x * carVel.x + carVel.y * carVel.y);
+      carSpeed = newSpd * RAIL_BOUNCE;
+      if (newSpd > 0.001) carAngle = Math.atan2(carVel.x / newSpd, carVel.y / newSpd);
+    } else {
+      carSpeed *= RAIL_BOUNCE;
+    }
+
+    cfTimer = 6;
   }
+  // ────────────────────────────────────────
 
   if (lastIdx > N * 0.85 && idx < N * 0.1) {
     lap++;
@@ -570,28 +694,31 @@ function loop() {
   update();
   renderer.render(scene, camera);
 }
+
 buildWorld();
-camera.position.set(36, 5, 8);
-camera.lookAt(45, 0, 0);
+resetCar(); // set initial car position/angle before the game starts
+camera.position.set(
+  TP[START_IDX].x - Math.sin(START_ANGLE) * 9,
+  TP[START_IDX].y + 5,
+  TP[START_IDX].z - Math.cos(START_ANGLE) * 9
+);
+camera.lookAt(TP[START_IDX].x, TP[START_IDX].y + 1, TP[START_IDX].z);
 loop();
 
 // ══════════════════════════════════════════
 //  UI WIRING
 // ══════════════════════════════════════════
 
-// Start
 document.getElementById('sb').addEventListener('click', () => {
-  requestGyro(); // MUST be first for iOS
+  requestGyro();
   resetCar();
   document.getElementById('overlay').style.display = 'none';
   document.getElementById('btns').style.display = 'flex';
   running = true;
 });
 
-// Restart
 document.getElementById('rstBtn').addEventListener('click', resetCar);
 
-// ⇄ Flip axis (one-tap quick invert)
 document.getElementById('flipBtn').addEventListener('click', () => {
   G.flip = !G.flip;
   const b = document.getElementById('flipBtn');
@@ -600,7 +727,6 @@ document.getElementById('flipBtn').addEventListener('click', () => {
   b.style.color       = G.flip ? '#00FF88' : '#FFD700';
 });
 
-// ✦ Recalibrate
 document.getElementById('calBtn').addEventListener('click', () => {
   calibrate();
   const b = document.getElementById('calBtn');
@@ -609,18 +735,15 @@ document.getElementById('calBtn').addEventListener('click', () => {
   setTimeout(() => b.textContent = orig, 1200);
 });
 
-// Open settings
 document.getElementById('settBtn').addEventListener('click', () => {
   syncSettingsUI();
   document.getElementById('settings').style.display = 'flex';
 });
 
-// Close settings
 document.getElementById('doneBtn').addEventListener('click', () => {
   document.getElementById('settings').style.display = 'none';
 });
 
-// Calibrate from settings panel
 document.getElementById('calBtnS').addEventListener('click', () => {
   calibrate();
   const b = document.getElementById('calBtnS');
@@ -628,31 +751,26 @@ document.getElementById('calBtnS').addEventListener('click', () => {
   setTimeout(() => b.textContent = '✦ SET CENTER POINT', 1400);
 });
 
-// Axis selector
 document.querySelectorAll('#axisSeg button').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('#axisSeg button').forEach(b => b.classList.remove('on'));
     btn.classList.add('on');
     G.axis = btn.dataset.a;
-    // Auto-recalibrate when axis changes
     setTimeout(() => { G.base = getRaw(); }, 100);
   });
 });
 
-// Invert toggle
 document.getElementById('invTog').addEventListener('click', () => {
   G.invert = !G.invert;
   document.getElementById('invTog').classList.toggle('on', G.invert);
   document.getElementById('invLabel').textContent = G.invert ? 'ON' : 'OFF';
 });
 
-// Sensitivity
 document.getElementById('sensSlider').addEventListener('input', function () {
   G.sens = +this.value;
   document.getElementById('sensLabel').textContent = G.sens + '°';
 });
 
-// Dead zone
 document.getElementById('dzSlider').addEventListener('input', function () {
   G.dz = +this.value;
   document.getElementById('dzLabel').textContent = G.dz + '°';
