@@ -79,7 +79,6 @@ canvas { display:block; }
 <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
 <script>
 // ABLY
-ablyClient = new Ably.Realtime({key, clientId:'tv-'+Date.now()});
 let ablyClient=null, channel=null, steerVal=0, phoneReady=false;
 const ROOM='gyro-'+Math.random().toString(36).slice(2,8).toUpperCase();
 
