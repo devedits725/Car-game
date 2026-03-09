@@ -94,7 +94,8 @@ function connectToAbly(key) {
   setStatus('CONNECTING...','');
   document.getElementById('connectBtn').disabled = true;
 
-  ablyClient = new Ably.Realtime({ key, clientId:'tv-'+Date.now() });
+  // No clientId — basic key auth does not need it, and setting it can cause 40012 errors
+  ablyClient = new Ably.Realtime({ key });
 
   ablyClient.connection.on('connected', () => {
     setStatus('● ABLY CONNECTED','ok');
@@ -113,12 +114,14 @@ function connectToAbly(key) {
     showStep2();
   });
 
-  ablyClient.connection.on('failed', (err) => {
-    setStatus('FAILED — CHECK YOUR API KEY','err');
+  ablyClient.connection.on('failed', (sc) => {
+    const r = sc && sc.reason;
+    setStatus('✖ ' + (r ? (r.message || ('code ' + r.code)) : 'connection failed — check key'), 'err');
     document.getElementById('connectBtn').disabled = false;
   });
-  ablyClient.connection.on('disconnected', () => {
-    setStatus('DISCONNECTED','err');
+  ablyClient.connection.on('disconnected', (sc) => {
+    const r = sc && sc.reason;
+    setStatus('✖ ' + (r ? (r.message || 'disconnected') : 'disconnected'), 'err');
     setPhone(false);
   });
 }
