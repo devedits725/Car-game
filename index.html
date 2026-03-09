@@ -76,7 +76,7 @@ canvas { display:block; }
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
+<script src="https://cdn.ably.com/lib/ably.min-2.js"></script>
 <script>
 // ABLY
 const ABLY_KEY = 'REPLACE_WITH_ABLY_KEY';
@@ -116,8 +116,8 @@ function connectToAbly(key){
       showStep2(key);
     });
 
-    ablyClient.connection.on('failed',()=>{
-      setStatus('FAILED — CHECK KEY','err');
+    ablyClient.connection.on('failed',(err)=>{
+      setStatus('FAILED: ' + (err?.message || 'CHECK KEY'),'err');
     });
 
   }catch(e){
