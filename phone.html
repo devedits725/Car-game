@@ -39,13 +39,14 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; h
 <div id="overlay">
   <h1>🏎<br>GYRO<br>RACER</h1>
   <p>PHONE CONTROLLER<br>TILT LEFT / RIGHT TO STEER</p>
-  <div id="wsStatus">READING URL...</div>
 
-  <div id="manualInput" style="display:none; flex-direction:column; gap:8px; width:100%; max-width:260px;">
-    <input id="keyIn" type="text" placeholder="Ably API Key" style="background:#111; color:#FFD700; border:2px solid #333; padding:8px; font-family:monospace; font-size:12px;">
-    <input id="roomIn" type="text" placeholder="Room Code (e.g. GYRO-ABCD)" style="background:#111; color:#FFD700; border:2px solid #333; padding:8px; font-family:monospace; font-size:12px;">
+  <div id="manualInput" style="display:flex; flex-direction:column; gap:8px; width:100%; max-width:260px; margin-bottom:10px;">
+    <div style="font-size:9px; color:#666; letter-spacing:1px;">ENTER DETAILS FROM TV SCREEN:</div>
+    <input id="keyIn" type="text" placeholder="Ably API Key (xxxx.yyyy:zzzz)" style="background:#111; color:#FFD700; border:2px solid #333; padding:10px; font-family:monospace; font-size:12px;">
+    <input id="roomIn" type="text" placeholder="Room Code (GYRO-XXXXXX)" style="background:#111; color:#FFD700; border:2px solid #333; padding:10px; font-family:monospace; font-size:12px;">
   </div>
 
+  <div id="wsStatus" style="margin-bottom:10px;">READY</div>
   <button class="startBtn" id="permitBtn">▶ ENABLE GYRO &amp; CONNECT</button>
 </div>
 
@@ -88,32 +89,22 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; h
 
 <script src="https://cdn.ably.com/lib/ably.min-2.js"></script>
 <script>
-// Read API key + room from URL hash (set by TV page)
-// Hash format: base64(apiKey|ROOM)
 let ablyClient=null,channel=null,wsReady=false;
 let rawAlpha=0,rawBeta=0,rawGamma=0,gyroLive=false;
 const G={axis:'gamma',invert:false,flip:false,sens:28,dz:4,base:null};
 
-function parseHash(){
-  const h=location.hash.slice(1);
-  if(!h){setStatus('NO KEY IN URL — SCAN QR OR COPY URL FROM TV','err');return null;}
-  try{
-    const decoded=atob(h);
-    const sep=decoded.lastIndexOf('|');
-    return{key:decoded.slice(0,sep),room:decoded.slice(sep+1)};
-  }catch(e){setStatus('INVALID URL — GO BACK TO TV PAGE','err');return null;}
-}
-
 function setStatus(msg,cls){const e=document.getElementById('wsStatus');e.textContent=msg;e.className=cls;}
 
-async function connectAbly(key,room){
+async function makeAbly(key,room){
+  if(!key || !room) { setStatus("MISSING KEY OR ROOM", "err"); return; }
   if(ablyClient) ablyClient.close();
 
   const regions = [null, 'eu-west-1', 'eu-west-2'];
   let success = false;
 
   for(let i=0; i<regions.length; i++){
-    setStatus(`CONNECTING (Try ${i+1}/${regions.length})...` + (regions[i] ? ` [${regions[i]}]` : ""), "");
+    const msg = `Trying region ${i+1}/${regions.length}` + (regions[i] ? ` [${regions[i]}]` : "");
+    setStatus(msg, "");
     try {
       const client = new Ably.Realtime({ key: key, environment: regions[i] });
       const result = await Promise.race([
@@ -121,7 +112,7 @@ async function connectAbly(key,room){
           client.connection.once('connected', () => res('ok'));
           client.connection.once('failed', (err) => res(err));
         }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error("Timeout")), 8000))
+        new Promise((_, rej) => setTimeout(() => rej(new Error("Timeout")), 10000))
       ]);
       if(result === 'ok'){
         ablyClient = client;
@@ -141,8 +132,7 @@ async function connectAbly(key,room){
     channel.publish('phone_hello',{ts:Date.now()});
     setInterval(sendGyro,33);
   } else {
-    setStatus('FAILED — TRY MANUAL INPUT','err');
-    document.getElementById('manualInput').style.display='flex';
+    setStatus('FAILED ALL REGIONS','err');
   }
 }
 
@@ -189,21 +179,31 @@ function requestGyro(){
 }
 
 // Init
-const parsed=parseHash();
-if(parsed)connectAbly(parsed.key,parsed.room);
+// Try to pre-fill from hash if present, but don't auto-connect
+const h=location.hash.slice(1);
+if(h){
+  try {
+    const decoded=atob(h);
+    const sep=decoded.lastIndexOf('|');
+    document.getElementById('keyIn').value = decoded.slice(0,sep);
+    document.getElementById('roomIn').value = decoded.slice(sep+1);
+  } catch(e) {}
+}
 
-document.getElementById('permitBtn').addEventListener('click',()=>{
+document.getElementById('permitBtn').addEventListener('click', async ()=>{
   const kIn = document.getElementById('keyIn').value.trim();
   const rIn = document.getElementById('roomIn').value.trim();
 
   if(kIn && rIn){
-    connectAbly(kIn, rIn);
+    await makeAbly(kIn, rIn);
+    if(wsReady) {
+      document.getElementById('overlay').style.display='none';
+    }
   } else {
-    // If not manual, we already tried on load
+    setStatus("ENTER KEY AND ROOM CODE", "err");
   }
 
   requestGyro();
-  document.getElementById('overlay').style.display='none';
 });
 document.getElementById('flipBtn').addEventListener('click',()=>{
   G.flip=!G.flip;const b=document.getElementById('flipBtn');

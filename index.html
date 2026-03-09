@@ -84,7 +84,7 @@ let usedKey = '';
 let ablyClient = null, channel = null, steerVal = 0, phoneReady = false;
 const ROOM='gyro-'+Math.random().toString(36).slice(2,8).toUpperCase();
 
-async function connectToAbly(key){
+async function makeAbly(key){
   if(!key){ setStatus("PLEASE ENTER A KEY","err"); return; }
   if(ablyClient) ablyClient.close();
 
@@ -92,7 +92,8 @@ async function connectToAbly(key){
   let success = false;
 
   for(let i=0; i<regions.length; i++){
-    setStatus(`CONNECTING (Try ${i+1}/${regions.length})...` + (regions[i] ? ` [${regions[i]}]` : ""), "");
+    const msg = `Trying region ${i+1}/${regions.length}` + (regions[i] ? ` [${regions[i]}]` : "");
+    setStatus(msg, "");
 
     try {
       const client = new Ably.Realtime({
@@ -105,7 +106,7 @@ async function connectToAbly(key){
           client.connection.once('connected', () => res('ok'));
           client.connection.once('failed', (err) => res(err));
         }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error("Timeout")), 8000))
+        new Promise((_, rej) => setTimeout(() => rej(new Error("Timeout")), 10000))
       ]);
 
       if(result === 'ok'){
@@ -113,8 +114,12 @@ async function connectToAbly(key){
         usedKey = key;
         success = true;
         break;
+      } else {
+        console.warn("Region failed:", regions[i], result);
       }
-    } catch(e) {}
+    } catch(e) {
+      console.error("Region error:", regions[i], e);
+    }
   }
 
   if(success){
@@ -136,7 +141,7 @@ async function connectToAbly(key){
 
 window.addEventListener("load", () => {
   if (ABLY_KEY !== 'REPLACE' + '_WITH_ABLY_KEY' && ABLY_KEY.includes('.')) {
-    connectToAbly(ABLY_KEY);
+    makeAbly(ABLY_KEY);
   } else {
     setStatus("WAITING FOR KEY","");
   }
@@ -144,7 +149,7 @@ window.addEventListener("load", () => {
 
 document.getElementById('connectBtn').addEventListener('click',()=>{
   const key = document.getElementById('keyInput').value.trim();
-  connectToAbly(key);
+  makeAbly(key);
 });
   
 
@@ -165,6 +170,7 @@ function showStep2(key){
   const phoneUrl = location.origin + '/phone.html#' + encoded;
 
   document.getElementById('phoneUrlBox').innerHTML =
+    'Room Code: <strong style="color:#FFD700; font-size:20px;">' + ROOM + '</strong><br><br>' +
     'Open this URL on your phone:<br><br><strong style="color:#FFD700">'+phoneUrl+'</strong>';
 }
 
