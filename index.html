@@ -263,22 +263,36 @@ function loop(){requestAnimationFrame(loop);update();renderer.render(scene,camer
 buildWorld();resetCar();loop();
 
 function makeAbly(key, onConnected, onFailed) {
-  // Try default (US) region first, auto-retry EU if app not found
-  function attempt(opts, isRetry) {
-    const client = new Ably.Realtime(opts);
-    client.connection.on('connected', () => onConnected(client));
+  // Try US, then EU-west-1, then EU-west-2 — with a 10s timeout each
+  const regions = [
+    {},
+    { environment: 'eu-west-1' },
+    { environment: 'eu-west-2' },
+  ];
+  let attempt = 0;
+  let timer = null;
+  let client = null;
+
+  function tryNext() {
+    if (attempt >= regions.length) { onFailed({ reason: { message: 'Could not connect in any region — check your API key is complete (including the part after the colon)' } }); return; }
+    if (client) { try { client.close(); } catch(_){} }
+    const opts = Object.assign({ key }, regions[attempt]);
+    const regionName = regions[attempt].environment || 'US (default)';
+    if (typeof setStatus === 'function') setStatus('CONNECTING... trying region ' + (attempt+1) + '/3', '');
+    attempt++;
+    client = new Ably.Realtime(opts);
+    // 10 second timeout per region
+    timer = setTimeout(() => { tryNext(); }, 10000);
+    client.connection.on('connected', () => {
+      clearTimeout(timer);
+      onConnected(client);
+    });
     client.connection.on('failed', (sc) => {
-      const msg = sc && sc.reason && (sc.reason.message || '');
-      // "No application found" = wrong region, retry with EU once
-      if (!isRetry && msg.toLowerCase().includes('no application found')) {
-        client.close();
-        attempt({ key, environment: 'eu-west-2' }, true);
-      } else {
-        onFailed(sc);
-      }
+      clearTimeout(timer);
+      tryNext();
     });
   }
-  attempt({ key }, false);
+  tryNext();
 }
 </script>
 </body>
