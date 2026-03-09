@@ -3,6 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build": "mkdir -p public && cp -r . public/ || true && sed -i \"s|REPLACE_WITH_ABLY_KEY|${NEXT_PUBLIC_ABLY_KEY:-$NEXT_PUBLI_ABLY_KEY}|g\" public/index.html"
+    "build": "mkdir -p public && cp -r . public/ || true"
   }
 }

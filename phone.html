@@ -19,21 +19,15 @@ body { display:flex; flex-direction:column; align-items:center; }
 .cb:active { opacity:.7; }
 .cb.y { border-color:#FFD700; color:#FFD700; }
 .cb.g { border-color:#00FF88; color:#00FF88; }
-
 /* overlay */
-#overlay { position:fixed; inset:0; background:#0a0a0a; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:50; gap:12px; padding:24px; text-align:center; overflow-y:auto; }
-#overlay h1 { color:#FFD700; font-size:clamp(22px,8vw,38px); font-weight:900; letter-spacing:5px; text-shadow:3px 3px 0 #000; line-height:1.2; margin-bottom:4px; }
-.icard { background:rgba(255,255,255,0.04); border:2px solid rgba(255,255,255,0.12); padding:12px 14px; width:100%; max-width:300px; text-align:left; }
-.icard label { color:rgba(255,255,255,0.4); font-size:9px; letter-spacing:3px; display:block; margin-bottom:7px; }
-.icard input { width:100%; background:rgba(0,0,0,0.6); border:2px solid rgba(255,255,255,0.18); color:#FFD700; font-family:'Courier New',monospace; font-size:12px; font-weight:bold; padding:9px 10px; outline:none; letter-spacing:1px; }
-.icard input:focus { border-color:#FFD700; }
-.icard input::placeholder { color:rgba(255,255,255,0.15); font-size:10px; font-weight:normal; letter-spacing:0; }
-#statusMsg { font-size:10px; letter-spacing:2px; color:rgba(255,255,255,0.35); min-height:16px; padding:6px 14px; border:2px solid rgba(255,255,255,0.1); }
-#statusMsg.ok  { color:#00FF88; border-color:#00FF88; }
-#statusMsg.err { color:#FF4400; border-color:#FF4400; }
-.startBtn { background:#FFD700; color:#000; font-family:'Courier New',monospace; font-weight:900; font-size:14px; letter-spacing:3px; border:4px solid #000; padding:14px 0; cursor:pointer; box-shadow:4px 4px 0 #000; width:100%; max-width:300px; }
+#overlay { position:fixed; inset:0; background:#0a0a0a; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:50; gap:16px; padding:28px; text-align:center; }
+#overlay h1 { color:#FFD700; font-size:clamp(24px,9vw,44px); font-weight:900; letter-spacing:5px; text-shadow:3px 3px 0 #000; line-height:1.15; }
+#overlay p { color:rgba(255,255,255,0.45); font-size:10px; letter-spacing:2px; line-height:2.2; }
+#wsStatus { font-size:10px; letter-spacing:2px; padding:8px 18px; border:2px solid rgba(255,255,255,0.15); color:rgba(255,255,255,0.35); }
+#wsStatus.ok { border-color:#00FF88; color:#00FF88; }
+#wsStatus.err { border-color:#FF4400; color:#FF4400; }
+.startBtn { background:#FFD700; color:#000; font-family:'Courier New',monospace; font-weight:900; font-size:14px; letter-spacing:3px; border:4px solid #000; padding:15px 0; cursor:pointer; box-shadow:4px 4px 0 #000; width:100%; max-width:260px; }
 .startBtn:active { transform:translate(2px,2px); box-shadow:2px 2px 0 #000; }
-
 /* sens panel */
 #sensPanel { display:none; position:fixed; bottom:76px; left:50%; transform:translateX(-50%); background:#111; border:2px solid #FFD700; padding:16px 20px; z-index:60; width:240px; text-align:center; }
 input[type=range] { -webkit-appearance:none; width:100%; height:8px; background:#222; border:2px solid #333; outline:none; margin:8px 0; }
@@ -44,24 +38,17 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; h
 
 <div id="overlay">
   <h1>🏎<br>GYRO<br>RACER</h1>
+  <p>PHONE CONTROLLER<br>TILT LEFT / RIGHT TO STEER</p>
 
-  <div class="icard">
-    <label>ABLY API KEY</label>
-    <input id="keyInput" type="text" placeholder="xxxx.yyyy:zzzzzzzzzzzz" autocomplete="off" spellcheck="false">
+  <div id="manualInput" style="display:flex; flex-direction:column; gap:8px; width:100%; max-width:260px; margin-bottom:10px;">
+    <div style="font-size:9px; color:#666; letter-spacing:1px;">ENTER ROOM CODE FROM TV:</div>
+    <input id="roomIn" type="text" placeholder="Room Code (GYRO-XXXXXX)" style="background:#111; color:#FFD700; border:2px solid #333; padding:10px; font-family:monospace; font-size:12px;">
   </div>
 
-  <div class="icard">
-    <label>ROOM CODE (shown on TV)</label>
-    <input id="roomInput" type="text" placeholder="e.g.  RACE-AB3XY" autocomplete="off" spellcheck="false"
-      style="text-transform:uppercase;letter-spacing:3px;">
-  </div>
-
-  <div id="statusMsg">ENTER KEY + ROOM CODE FROM TV</div>
-
-  <button class="startBtn" id="connectBtn">▶ CONNECT &amp; ENABLE GYRO</button>
+  <div id="wsStatus" style="margin-bottom:10px;">READY</div>
+  <button class="startBtn" id="permitBtn">▶ ENABLE GYRO &amp; CONNECT</button>
 </div>
 
-<!-- CONTROLLER UI (shown after connecting) -->
 <div id="arcWrap">
   <svg id="arcSvg" viewBox="0 0 300 300">
     <path d="M 30 200 A 140 140 0 0 1 270 200" fill="none" stroke="#1a1a1a" stroke-width="30" stroke-linecap="round"/>
@@ -99,50 +86,46 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; h
   <button onclick="document.getElementById('sensPanel').style.display='none'" style="margin-top:10px;background:#FFD700;color:#000;font-family:'Courier New',monospace;font-weight:900;font-size:12px;letter-spacing:2px;border:3px solid #000;padding:8px 20px;cursor:pointer">✓ DONE</button>
 </div>
 
-<script src="https://cdn.ably.com/lib/ably.min-2.js"></script>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
-const G={axis:'gamma',invert:false,flip:false,sens:28,dz:4,base:null};
+let peer=null,conn=null,wsReady=false;
 let rawAlpha=0,rawBeta=0,rawGamma=0,gyroLive=false;
-let ablyClient=null,channel=null,sendTimer=null;
+const G={axis:'gamma',invert:false,flip:false,sens:28,dz:4,base:null};
 
-function setStatus(msg,cls){const e=document.getElementById('statusMsg');e.textContent=msg;e.className=cls;}
+function setStatus(msg,cls){const e=document.getElementById('wsStatus');e.textContent=msg;e.className=cls;}
 
-// ── CONNECT ───────────────────────────────────────────────────────────────────
-function connectAbly(key,room){
-  if(!key||!key.includes(':')){ setStatus('✖ INVALID API KEY — CHECK AND RETRY','err'); return; }
-  if(!room){ setStatus('✖ ENTER THE ROOM CODE FROM THE TV','err'); return; }
-  if(ablyClient){try{ablyClient.close();}catch(_){}}
+async function initPeer(room){
+  if(!room) { setStatus("MISSING ROOM CODE", "err"); return; }
+  if(peer) peer.destroy();
 
-  setStatus('CONNECTING TO ABLY...','');
+  setStatus("CONNECTING...", "");
+  peer = new Peer();
 
-  makeAbly(key,
-    (client)=>{
-      ablyClient=client;
-      channel=ablyClient.channels.get(room);
-      channel.subscribe('tv_cmd',(msg)=>{
-        if(msg.data&&msg.data.type==='start') document.getElementById('raceTag').style.display='block';
+  peer.on('open', () => {
+    conn = peer.connect(room);
+
+    conn.on('open', () => {
+      wsReady=true;
+      setStatus('● CONNECTED','ok');
+      conn.on('data', (data) => {
+        if(data.type==='start') document.getElementById('raceTag').style.display='block';
       });
-      channel.publish('phone_hello',{ts:Date.now()});
-      if(sendTimer) clearInterval(sendTimer);
-      sendTimer=setInterval(sendGyro,33);
-      setStatus('● CONNECTED TO ROOM: '+room,'ok');
-    },
-    (sc)=>{
-      const r=sc&&sc.reason;
-      setStatus('✖ '+(r?(r.message||('code '+r.code)):'failed — check key'),'err');
-    }
-  );
+      setInterval(sendGyro, 33);
+    });
+
+    conn.on('error', (err) => setStatus('CONN ERROR: ' + err, 'err'));
+    conn.on('close', () => setStatus('DISCONNECTED', 'err'));
+  });
+
+  peer.on('error', (err) => setStatus('PEER ERROR: ' + err.type, 'err'));
 }
 
 function sendGyro(){
-  if(!channel||ablyClient.connection.state!=='connected')return;
-  channel.publish('gyro',{
-    alpha:rawAlpha, beta:rawBeta, gamma:rawGamma,
-    steer:computeSteer(), raw:getRaw()
-  });
+  if(!wsReady||!conn)return;
+  conn.send({type:'gyro', alpha:rawAlpha,beta:rawBeta,gamma:rawGamma,steer:computeSteer(),raw:getRaw()});
 }
 
-// ── GYRO ──────────────────────────────────────────────────────────────────────
+// Gyro
 function getRaw(){return G.axis==='gamma'?rawGamma:G.axis==='beta'?rawBeta:rawAlpha;}
 function computeSteer(){
   let raw=getRaw(),base=G.base!==null?G.base:raw,delta=raw-base;
@@ -160,6 +143,7 @@ function onOrient(e){
 function updateUI(){
   const raw=getRaw(),steer=computeSteer(),deg=steer*88;
   document.getElementById('needle').style.transform='rotate('+deg+'deg)';
+  // arc
   const R=140,cx=150,cy=200,sa=-Math.PI/2,ea=sa+steer*Math.PI/2;
   const x1=cx+R*Math.cos(sa),y1=cy+R*Math.sin(sa),x2=cx+R*Math.cos(ea),y2=cy+R*Math.sin(ea);
   if(Math.abs(steer)<0.02){document.getElementById('arcFill').setAttribute('d','M '+x1+' '+y1);}
@@ -178,16 +162,31 @@ function requestGyro(){
   }else{window.addEventListener('deviceorientation',onOrient);}
 }
 
-// ── UI ────────────────────────────────────────────────────────────────────────
-document.getElementById('connectBtn').addEventListener('click',()=>{
-  const key  = document.getElementById('keyInput').value.trim();
-  const room = document.getElementById('roomInput').value.trim().toUpperCase();
-  // Request gyro FIRST (must be inside user gesture for iOS)
-  requestGyro();
-  connectAbly(key, room);
-  document.getElementById('overlay').style.display='none';
-});
+// Init
+// Try to pre-fill from hash if present, but don't auto-connect
+const h=location.hash.slice(1);
+if(h){
+  try {
+    const decoded=atob(h);
+    // PeerJS hash is just the ROOM ID
+    document.getElementById('roomIn').value = decoded;
+  } catch(e) {}
+}
 
+document.getElementById('permitBtn').addEventListener('click', async ()=>{
+  const rIn = document.getElementById('roomIn').value.trim();
+
+  if(rIn){
+    await initPeer(rIn);
+    if(wsReady) {
+      document.getElementById('overlay').style.display='none';
+    }
+  } else {
+    setStatus("ENTER ROOM CODE", "err");
+  }
+
+  requestGyro();
+});
 document.getElementById('flipBtn').addEventListener('click',()=>{
   G.flip=!G.flip;const b=document.getElementById('flipBtn');
   b.textContent=G.flip?'⇄ ON':'⇄ FLIP';b.style.color=G.flip?'#00FF88':'#FFD700';b.style.borderColor=G.flip?'#00FF88':'#FFD700';
@@ -200,27 +199,11 @@ document.getElementById('settBtn').addEventListener('click',()=>{
 });
 document.getElementById('sensSlider').addEventListener('input',function(){G.sens=+this.value;document.getElementById('sensLbl').textContent=G.sens+'°';});
 
+// Keep screen on
 if('wakeLock'in navigator)navigator.wakeLock.request('screen').catch(()=>{});
-window.addEventListener('beforeunload',()=>{if(channel)channel.publish('phone_bye',{});});
 
-function makeAbly(key, onConnected, onFailed) {
-  // Try default (US) region first, auto-retry EU if app not found
-  function attempt(opts, isRetry) {
-    const client = new Ably.Realtime(opts);
-    client.connection.on('connected', () => onConnected(client));
-    client.connection.on('failed', (sc) => {
-      const msg = sc && sc.reason && (sc.reason.message || '');
-      // "No application found" = wrong region, retry with EU once
-      if (!isRetry && msg.toLowerCase().includes('no application found')) {
-        client.close();
-        attempt({ key, environment: 'eu-west-2' }, true);
-      } else {
-        onFailed(sc);
-      }
-    });
-  }
-  attempt({ key }, false);
-}
+// Announce leaving
+window.addEventListener('beforeunload',()=>{if(conn)conn.close();});
 </script>
 </body>
 </html>
