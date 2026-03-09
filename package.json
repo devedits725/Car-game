@@ -3,6 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build": "sed -i \"s/REPLACE_WITH_ABLY_KEY/${NEXT_PUBLIC_ABLY_KEY}/g\" index.html"
+    "build": "mkdir -p public && cp *.html public/ && sed -i \"s|REPLACE_WITH_ABLY_KEY|${NEXT_PUBLIC_ABLY_KEY}|g\" public/index.html"
   }
 }
