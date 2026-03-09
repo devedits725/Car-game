@@ -19,15 +19,21 @@ body { display:flex; flex-direction:column; align-items:center; }
 .cb:active { opacity:.7; }
 .cb.y { border-color:#FFD700; color:#FFD700; }
 .cb.g { border-color:#00FF88; color:#00FF88; }
+
 /* overlay */
-#overlay { position:fixed; inset:0; background:#0a0a0a; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:50; gap:16px; padding:28px; text-align:center; }
-#overlay h1 { color:#FFD700; font-size:clamp(24px,9vw,44px); font-weight:900; letter-spacing:5px; text-shadow:3px 3px 0 #000; line-height:1.15; }
-#overlay p { color:rgba(255,255,255,0.45); font-size:10px; letter-spacing:2px; line-height:2.2; }
-#wsStatus { font-size:10px; letter-spacing:2px; padding:8px 18px; border:2px solid rgba(255,255,255,0.15); color:rgba(255,255,255,0.35); }
-#wsStatus.ok { border-color:#00FF88; color:#00FF88; }
-#wsStatus.err { border-color:#FF4400; color:#FF4400; }
-.startBtn { background:#FFD700; color:#000; font-family:'Courier New',monospace; font-weight:900; font-size:14px; letter-spacing:3px; border:4px solid #000; padding:15px 0; cursor:pointer; box-shadow:4px 4px 0 #000; width:100%; max-width:260px; }
+#overlay { position:fixed; inset:0; background:#0a0a0a; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:50; gap:12px; padding:24px; text-align:center; overflow-y:auto; }
+#overlay h1 { color:#FFD700; font-size:clamp(22px,8vw,38px); font-weight:900; letter-spacing:5px; text-shadow:3px 3px 0 #000; line-height:1.2; margin-bottom:4px; }
+.icard { background:rgba(255,255,255,0.04); border:2px solid rgba(255,255,255,0.12); padding:12px 14px; width:100%; max-width:300px; text-align:left; }
+.icard label { color:rgba(255,255,255,0.4); font-size:9px; letter-spacing:3px; display:block; margin-bottom:7px; }
+.icard input { width:100%; background:rgba(0,0,0,0.6); border:2px solid rgba(255,255,255,0.18); color:#FFD700; font-family:'Courier New',monospace; font-size:12px; font-weight:bold; padding:9px 10px; outline:none; letter-spacing:1px; }
+.icard input:focus { border-color:#FFD700; }
+.icard input::placeholder { color:rgba(255,255,255,0.15); font-size:10px; font-weight:normal; letter-spacing:0; }
+#statusMsg { font-size:10px; letter-spacing:2px; color:rgba(255,255,255,0.35); min-height:16px; padding:6px 14px; border:2px solid rgba(255,255,255,0.1); }
+#statusMsg.ok  { color:#00FF88; border-color:#00FF88; }
+#statusMsg.err { color:#FF4400; border-color:#FF4400; }
+.startBtn { background:#FFD700; color:#000; font-family:'Courier New',monospace; font-weight:900; font-size:14px; letter-spacing:3px; border:4px solid #000; padding:14px 0; cursor:pointer; box-shadow:4px 4px 0 #000; width:100%; max-width:300px; }
 .startBtn:active { transform:translate(2px,2px); box-shadow:2px 2px 0 #000; }
+
 /* sens panel */
 #sensPanel { display:none; position:fixed; bottom:76px; left:50%; transform:translateX(-50%); background:#111; border:2px solid #FFD700; padding:16px 20px; z-index:60; width:240px; text-align:center; }
 input[type=range] { -webkit-appearance:none; width:100%; height:8px; background:#222; border:2px solid #333; outline:none; margin:8px 0; }
@@ -38,11 +44,24 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; h
 
 <div id="overlay">
   <h1>🏎<br>GYRO<br>RACER</h1>
-  <p>PHONE CONTROLLER<br>TILT LEFT / RIGHT TO STEER</p>
-  <div id="wsStatus">READING URL...</div>
-  <button class="startBtn" id="permitBtn">▶ ENABLE GYRO &amp; CONNECT</button>
+
+  <div class="icard">
+    <label>ABLY API KEY</label>
+    <input id="keyInput" type="text" placeholder="xxxx.yyyy:zzzzzzzzzzzz" autocomplete="off" spellcheck="false">
+  </div>
+
+  <div class="icard">
+    <label>ROOM CODE (shown on TV)</label>
+    <input id="roomInput" type="text" placeholder="e.g.  RACE-AB3XY" autocomplete="off" spellcheck="false"
+      style="text-transform:uppercase;letter-spacing:3px;">
+  </div>
+
+  <div id="statusMsg">ENTER KEY + ROOM CODE FROM TV</div>
+
+  <button class="startBtn" id="connectBtn">▶ CONNECT &amp; ENABLE GYRO</button>
 </div>
 
+<!-- CONTROLLER UI (shown after connecting) -->
 <div id="arcWrap">
   <svg id="arcSvg" viewBox="0 0 300 300">
     <path d="M 30 200 A 140 140 0 0 1 270 200" fill="none" stroke="#1a1a1a" stroke-width="30" stroke-linecap="round"/>
@@ -82,51 +101,53 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; h
 
 <script src="https://cdn.ably.com/lib/ably.min-2.js"></script>
 <script>
-// Read API key + room from URL hash (set by TV page)
-// Hash format: base64(apiKey|ROOM)
-let ablyClient=null,channel=null,wsReady=false;
-let rawAlpha=0,rawBeta=0,rawGamma=0,gyroLive=false;
 const G={axis:'gamma',invert:false,flip:false,sens:28,dz:4,base:null};
+let rawAlpha=0,rawBeta=0,rawGamma=0,gyroLive=false;
+let ablyClient=null,channel=null,sendTimer=null;
 
-function parseHash(){
-  const h=location.hash.slice(1);
-  if(!h){setStatus('NO KEY IN URL — SCAN QR OR COPY URL FROM TV','err');return null;}
-  try{
-    const decoded=atob(h);
-    const sep=decoded.lastIndexOf('|');
-    return{key:decoded.slice(0,sep),room:decoded.slice(sep+1)};
-  }catch(e){setStatus('INVALID URL — GO BACK TO TV PAGE','err');return null;}
-}
+function setStatus(msg,cls){const e=document.getElementById('statusMsg');e.textContent=msg;e.className=cls;}
 
-function setStatus(msg,cls){const e=document.getElementById('wsStatus');e.textContent=msg;e.className=cls;}
-
+// ── CONNECT ───────────────────────────────────────────────────────────────────
 function connectAbly(key,room){
+  if(!key||!key.includes(':')){ setStatus('✖ INVALID API KEY — CHECK AND RETRY','err'); return; }
+  if(!room){ setStatus('✖ ENTER THE ROOM CODE FROM THE TV','err'); return; }
+  if(ablyClient){try{ablyClient.close();}catch(_){}}
+
   setStatus('CONNECTING TO ABLY...','');
-  try{
-    ablyClient=new Ably.Realtime({key,clientId:'phone-'+Date.now()});
-    ablyClient.connection.on('connected',()=>{
-      wsReady=true;
-      setStatus('● CONNECTED — ENABLE GYRO BELOW','ok');
-      channel=ablyClient.channels.get(room);
-      channel.subscribe('tv_cmd',(msg)=>{
-        if(msg.data&&msg.data.type==='start') document.getElementById('raceTag').style.display='block';
-      });
-      // Announce arrival
-      channel.publish('phone_hello',{ts:Date.now()});
-      // Start streaming
-      setInterval(sendGyro,33);
+
+  // No clientId — basic key auth does not need it
+  ablyClient=new Ably.Realtime({key});
+
+  ablyClient.connection.on('connected',()=>{
+    channel=ablyClient.channels.get(room);
+    channel.subscribe('tv_cmd',(msg)=>{
+      if(msg.data&&msg.data.type==='start') document.getElementById('raceTag').style.display='block';
     });
-    ablyClient.connection.on('failed',(err)=>setStatus('ABLY FAILED: '+(err?.message||'CHECK KEY'),'err'));
-    ablyClient.connection.on('disconnected',()=>setStatus('DISCONNECTED','err'));
-  }catch(e){setStatus('ERROR: '+e.message,'err');}
+    channel.publish('phone_hello',{ts:Date.now()});
+    if(sendTimer) clearInterval(sendTimer);
+    sendTimer=setInterval(sendGyro,33);
+    setStatus('● CONNECTED TO ROOM: '+room,'ok');
+  });
+
+  ablyClient.connection.on('failed',(sc)=>{
+    const r=sc&&sc.reason;
+    setStatus('✖ '+(r?(r.message||('code '+r.code)):'failed — check key'),'err');
+  });
+  ablyClient.connection.on('disconnected',(sc)=>{
+    const r=sc&&sc.reason;
+    setStatus('✖ '+(r?(r.message||'disconnected'):'disconnected'),'err');
+  });
 }
 
 function sendGyro(){
-  if(!wsReady||!channel)return;
-  channel.publish('gyro',{alpha:rawAlpha,beta:rawBeta,gamma:rawGamma,steer:computeSteer(),raw:getRaw()});
+  if(!channel||ablyClient.connection.state!=='connected')return;
+  channel.publish('gyro',{
+    alpha:rawAlpha, beta:rawBeta, gamma:rawGamma,
+    steer:computeSteer(), raw:getRaw()
+  });
 }
 
-// Gyro
+// ── GYRO ──────────────────────────────────────────────────────────────────────
 function getRaw(){return G.axis==='gamma'?rawGamma:G.axis==='beta'?rawBeta:rawAlpha;}
 function computeSteer(){
   let raw=getRaw(),base=G.base!==null?G.base:raw,delta=raw-base;
@@ -144,7 +165,6 @@ function onOrient(e){
 function updateUI(){
   const raw=getRaw(),steer=computeSteer(),deg=steer*88;
   document.getElementById('needle').style.transform='rotate('+deg+'deg)';
-  // arc
   const R=140,cx=150,cy=200,sa=-Math.PI/2,ea=sa+steer*Math.PI/2;
   const x1=cx+R*Math.cos(sa),y1=cy+R*Math.sin(sa),x2=cx+R*Math.cos(ea),y2=cy+R*Math.sin(ea);
   if(Math.abs(steer)<0.02){document.getElementById('arcFill').setAttribute('d','M '+x1+' '+y1);}
@@ -163,14 +183,16 @@ function requestGyro(){
   }else{window.addEventListener('deviceorientation',onOrient);}
 }
 
-// Init
-const parsed=parseHash();
-if(parsed)connectAbly(parsed.key,parsed.room);
-
-document.getElementById('permitBtn').addEventListener('click',()=>{
+// ── UI ────────────────────────────────────────────────────────────────────────
+document.getElementById('connectBtn').addEventListener('click',()=>{
+  const key  = document.getElementById('keyInput').value.trim();
+  const room = document.getElementById('roomInput').value.trim().toUpperCase();
+  // Request gyro FIRST (must be inside user gesture for iOS)
   requestGyro();
+  connectAbly(key, room);
   document.getElementById('overlay').style.display='none';
 });
+
 document.getElementById('flipBtn').addEventListener('click',()=>{
   G.flip=!G.flip;const b=document.getElementById('flipBtn');
   b.textContent=G.flip?'⇄ ON':'⇄ FLIP';b.style.color=G.flip?'#00FF88':'#FFD700';b.style.borderColor=G.flip?'#00FF88':'#FFD700';
@@ -183,10 +205,7 @@ document.getElementById('settBtn').addEventListener('click',()=>{
 });
 document.getElementById('sensSlider').addEventListener('input',function(){G.sens=+this.value;document.getElementById('sensLbl').textContent=G.sens+'°';});
 
-// Keep screen on
 if('wakeLock'in navigator)navigator.wakeLock.request('screen').catch(()=>{});
-
-// Announce leaving
 window.addEventListener('beforeunload',()=>{if(channel)channel.publish('phone_bye',{});});
 </script>
 </body>
