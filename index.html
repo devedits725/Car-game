@@ -265,7 +265,8 @@ buildWorld();resetCar();loop();
 function makeAbly(key, onConnected, onFailed) {
   // Try US, then EU-west-1, then EU-west-2 — with a 10s timeout each
   const regions = [
-    {},
+    { environment: 'ap-south-1' },  // India — try first
+    {},                              // US default
     { environment: 'eu-west-1' },
     { environment: 'eu-west-2' },
   ];
@@ -278,7 +279,7 @@ function makeAbly(key, onConnected, onFailed) {
     if (client) { try { client.close(); } catch(_){} }
     const opts = Object.assign({ key }, regions[attempt]);
     const regionName = regions[attempt].environment || 'US (default)';
-    if (typeof setStatus === 'function') setStatus('CONNECTING... trying region ' + (attempt+1) + '/3', '');
+    if (typeof setStatus === 'function') setStatus('CONNECTING... trying region ' + (attempt+1) + '/4', '');
     attempt++;
     client = new Ably.Realtime(opts);
     // 10 second timeout per region
