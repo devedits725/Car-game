@@ -115,28 +115,23 @@ function connectAbly(key,room){
 
   setStatus('CONNECTING TO ABLY...','');
 
-  // No clientId — basic key auth does not need it
-  ablyClient=new Ably.Realtime({key});
-
-  ablyClient.connection.on('connected',()=>{
-    channel=ablyClient.channels.get(room);
-    channel.subscribe('tv_cmd',(msg)=>{
-      if(msg.data&&msg.data.type==='start') document.getElementById('raceTag').style.display='block';
-    });
-    channel.publish('phone_hello',{ts:Date.now()});
-    if(sendTimer) clearInterval(sendTimer);
-    sendTimer=setInterval(sendGyro,33);
-    setStatus('● CONNECTED TO ROOM: '+room,'ok');
-  });
-
-  ablyClient.connection.on('failed',(sc)=>{
-    const r=sc&&sc.reason;
-    setStatus('✖ '+(r?(r.message||('code '+r.code)):'failed — check key'),'err');
-  });
-  ablyClient.connection.on('disconnected',(sc)=>{
-    const r=sc&&sc.reason;
-    setStatus('✖ '+(r?(r.message||'disconnected'):'disconnected'),'err');
-  });
+  makeAbly(key,
+    (client)=>{
+      ablyClient=client;
+      channel=ablyClient.channels.get(room);
+      channel.subscribe('tv_cmd',(msg)=>{
+        if(msg.data&&msg.data.type==='start') document.getElementById('raceTag').style.display='block';
+      });
+      channel.publish('phone_hello',{ts:Date.now()});
+      if(sendTimer) clearInterval(sendTimer);
+      sendTimer=setInterval(sendGyro,33);
+      setStatus('● CONNECTED TO ROOM: '+room,'ok');
+    },
+    (sc)=>{
+      const r=sc&&sc.reason;
+      setStatus('✖ '+(r?(r.message||('code '+r.code)):'failed — check key'),'err');
+    }
+  );
 }
 
 function sendGyro(){
@@ -207,6 +202,25 @@ document.getElementById('sensSlider').addEventListener('input',function(){G.sens
 
 if('wakeLock'in navigator)navigator.wakeLock.request('screen').catch(()=>{});
 window.addEventListener('beforeunload',()=>{if(channel)channel.publish('phone_bye',{});});
+
+function makeAbly(key, onConnected, onFailed) {
+  // Try default (US) region first, auto-retry EU if app not found
+  function attempt(opts, isRetry) {
+    const client = new Ably.Realtime(opts);
+    client.connection.on('connected', () => onConnected(client));
+    client.connection.on('failed', (sc) => {
+      const msg = sc && sc.reason && (sc.reason.message || '');
+      // "No application found" = wrong region, retry with EU once
+      if (!isRetry && msg.toLowerCase().includes('no application found')) {
+        client.close();
+        attempt({ key, environment: 'eu-west-2' }, true);
+      } else {
+        onFailed(sc);
+      }
+    });
+  }
+  attempt({ key }, false);
+}
 </script>
 </body>
 </html>
