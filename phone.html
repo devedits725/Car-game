@@ -40,6 +40,12 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; h
   <h1>🏎<br>GYRO<br>RACER</h1>
   <p>PHONE CONTROLLER<br>TILT LEFT / RIGHT TO STEER</p>
   <div id="wsStatus">READING URL...</div>
+
+  <div id="manualInput" style="display:none; flex-direction:column; gap:8px; width:100%; max-width:260px;">
+    <input id="keyIn" type="text" placeholder="Ably API Key" style="background:#111; color:#FFD700; border:2px solid #333; padding:8px; font-family:monospace; font-size:12px;">
+    <input id="roomIn" type="text" placeholder="Room Code (e.g. GYRO-ABCD)" style="background:#111; color:#FFD700; border:2px solid #333; padding:8px; font-family:monospace; font-size:12px;">
+  </div>
+
   <button class="startBtn" id="permitBtn">▶ ENABLE GYRO &amp; CONNECT</button>
 </div>
 
@@ -100,25 +106,44 @@ function parseHash(){
 
 function setStatus(msg,cls){const e=document.getElementById('wsStatus');e.textContent=msg;e.className=cls;}
 
-function connectAbly(key,room){
-  setStatus('CONNECTING TO ABLY...','');
-  try{
-    ablyClient=new Ably.Realtime({key,clientId:'phone-'+Date.now()});
-    ablyClient.connection.on('connected',()=>{
-      wsReady=true;
-      setStatus('● CONNECTED — ENABLE GYRO BELOW','ok');
-      channel=ablyClient.channels.get(room);
-      channel.subscribe('tv_cmd',(msg)=>{
-        if(msg.data&&msg.data.type==='start') document.getElementById('raceTag').style.display='block';
-      });
-      // Announce arrival
-      channel.publish('phone_hello',{ts:Date.now()});
-      // Start streaming
-      setInterval(sendGyro,33);
+async function connectAbly(key,room){
+  if(ablyClient) ablyClient.close();
+
+  const regions = [null, 'eu-west-1', 'eu-west-2'];
+  let success = false;
+
+  for(let i=0; i<regions.length; i++){
+    setStatus(`CONNECTING (Try ${i+1}/${regions.length})...` + (regions[i] ? ` [${regions[i]}]` : ""), "");
+    try {
+      const client = new Ably.Realtime({ key: key, environment: regions[i] });
+      const result = await Promise.race([
+        new Promise(res => {
+          client.connection.once('connected', () => res('ok'));
+          client.connection.once('failed', (err) => res(err));
+        }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error("Timeout")), 8000))
+      ]);
+      if(result === 'ok'){
+        ablyClient = client;
+        success = true;
+        break;
+      }
+    } catch(e) {}
+  }
+
+  if(success){
+    wsReady=true;
+    setStatus('● CONNECTED','ok');
+    channel=ablyClient.channels.get(room);
+    channel.subscribe('tv_cmd',(msg)=>{
+      if(msg.data&&msg.data.type==='start') document.getElementById('raceTag').style.display='block';
     });
-    ablyClient.connection.on('failed',(err)=>setStatus('ABLY FAILED: '+(err?.message||'CHECK KEY'),'err'));
-    ablyClient.connection.on('disconnected',()=>setStatus('DISCONNECTED','err'));
-  }catch(e){setStatus('ERROR: '+e.message,'err');}
+    channel.publish('phone_hello',{ts:Date.now()});
+    setInterval(sendGyro,33);
+  } else {
+    setStatus('FAILED — TRY MANUAL INPUT','err');
+    document.getElementById('manualInput').style.display='flex';
+  }
 }
 
 function sendGyro(){
@@ -168,6 +193,15 @@ const parsed=parseHash();
 if(parsed)connectAbly(parsed.key,parsed.room);
 
 document.getElementById('permitBtn').addEventListener('click',()=>{
+  const kIn = document.getElementById('keyIn').value.trim();
+  const rIn = document.getElementById('roomIn').value.trim();
+
+  if(kIn && rIn){
+    connectAbly(kIn, rIn);
+  } else {
+    // If not manual, we already tried on load
+  }
+
   requestGyro();
   document.getElementById('overlay').style.display='none';
 });

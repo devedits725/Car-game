@@ -84,44 +84,53 @@ let usedKey = '';
 let ablyClient = null, channel = null, steerVal = 0, phoneReady = false;
 const ROOM='gyro-'+Math.random().toString(36).slice(2,8).toUpperCase();
 
-function connectToAbly(key){
+async function connectToAbly(key){
   if(!key){ setStatus("PLEASE ENTER A KEY","err"); return; }
-
-  // Clean up existing
   if(ablyClient) ablyClient.close();
 
-  setStatus("CONNECTING...","");
+  const regions = [null, 'eu-west-1', 'eu-west-2'];
+  let success = false;
 
-  try{
-    ablyClient = new Ably.Realtime({
-      key: key,
-      clientId: 'tv-'+Date.now()
-    });
+  for(let i=0; i<regions.length; i++){
+    setStatus(`CONNECTING (Try ${i+1}/${regions.length})...` + (regions[i] ? ` [${regions[i]}]` : ""), "");
 
-    ablyClient.connection.on('connected',()=>{
-      usedKey = key;
-      setStatus('● ABLY CONNECTED','ok');
-      channel = ablyClient.channels.get(ROOM);
-
-      channel.subscribe('gyro',(msg)=>{
-        steerVal = msg.data.steer || 0;
-        document.getElementById('gth').style.left=((steerVal+1)/2*100)+'%';
-        document.getElementById('gyroHud').textContent=(msg.data.gamma||0).toFixed(0)+'°';
-        document.getElementById('gyroHud').style.color='#00FF88';
+    try {
+      const client = new Ably.Realtime({
+        key: key,
+        environment: regions[i]
       });
 
-      channel.subscribe('phone_hello',()=>setPhone(true));
-      channel.subscribe('phone_bye',()=>setPhone(false));
+      const result = await Promise.race([
+        new Promise(res => {
+          client.connection.once('connected', () => res('ok'));
+          client.connection.once('failed', (err) => res(err));
+        }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error("Timeout")), 8000))
+      ]);
 
-      showStep2(key);
+      if(result === 'ok'){
+        ablyClient = client;
+        usedKey = key;
+        success = true;
+        break;
+      }
+    } catch(e) {}
+  }
+
+  if(success){
+    setStatus('● ABLY CONNECTED','ok');
+    channel = ablyClient.channels.get(ROOM);
+    channel.subscribe('gyro',(msg)=>{
+      steerVal = msg.data.steer || 0;
+      document.getElementById('gth').style.left=((steerVal+1)/2*100)+'%';
+      document.getElementById('gyroHud').textContent=(msg.data.gamma||0).toFixed(0)+'°';
+      document.getElementById('gyroHud').style.color='#00FF88';
     });
-
-    ablyClient.connection.on('failed',(err)=>{
-      setStatus('FAILED: ' + (err?.message || 'CHECK KEY'),'err');
-    });
-
-  }catch(e){
-    setStatus('ERROR: '+e.message,'err');
+    channel.subscribe('phone_hello',()=>setPhone(true));
+    channel.subscribe('phone_bye',()=>setPhone(false));
+    showStep2(key);
+  } else {
+    setStatus('FAILED TO CONNECT ALL REGIONS','err');
   }
 }
 
